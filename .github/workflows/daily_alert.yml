@@ -5,7 +5,7 @@ on:
     # All key market scan slots enabled automatically (Mon-Fri)
     - cron: '0 4 * * 1-5'    # 09:30 AM IST (Morning Scan)
     - cron: '30 9 * * 1-5'   # 03:00 PM IST (Afternoon Scan)
-    - cron: '25 8 * * 1-5'   # 01:55 PM IST (Market Close Scan)
+    - cron: '50 8 * * 1-5'   # 02:20 PM IST (Market Close Scan)
 
   # Allows manual triggering anytime from the GitHub UI or API
   workflow_dispatch:
