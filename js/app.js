@@ -198,6 +198,11 @@ class AppController {
         this.newRecipientEmail = document.getElementById("new-recipient-email");
         this.btnAddEmail = document.getElementById("btn-add-email");
         this.recipientsList = document.getElementById("recipients-list");
+        
+        // GitHub Sync DOM elements
+        this.githubRepo = document.getElementById("github-repo");
+        this.githubPat = document.getElementById("github-pat");
+        this.btnSaveGithubSync = document.getElementById("btn-save-github-sync");
 
         // SMTP Form Fields & Gateway Method
         this.emailSimulationMode = document.getElementById("email-simulation-mode");
@@ -305,6 +310,7 @@ class AppController {
             this.saveEmailSettings();
             this.resetNextEmailTime();
             this.updateCloudCronDisplay();
+            this.syncCloudScheduler();
         };
 
         this.emailSendHour.addEventListener("change", handleTimeChange);
@@ -314,6 +320,18 @@ class AppController {
         this.emailSecondSendHour.addEventListener("change", handleTimeChange);
         this.emailSecondSendMinute.addEventListener("change", handleTimeChange);
         this.emailSecondSendAmpm.addEventListener("change", handleTimeChange);
+
+        // Bind GitHub Sync Save
+        if (this.btnSaveGithubSync) {
+            this.btnSaveGithubSync.addEventListener("click", () => {
+                this.emailSettings.githubRepo = this.githubRepo.value.trim();
+                this.emailSettings.githubPat = this.githubPat.value.trim();
+                this.saveEmailSettings();
+                this.addLog(`GitHub Sync Settings updated. Target repo: ${this.emailSettings.githubRepo}`);
+                alert("GitHub Sync Settings saved!");
+                this.syncCloudScheduler();
+            });
+        }
 
         if (this.btnCopyCloudCron) {
             this.btnCopyCloudCron.addEventListener("click", () => {
@@ -458,6 +476,10 @@ class AppController {
         this.smtpSenderName.value = this.emailSettings.smtpSenderName || "NSE Signal Terminal";
         this.smtpEnableSsl.checked = this.emailSettings.smtpEnableSsl !== false;
 
+        // Populate GitHub Sync fields
+        if (this.githubRepo) this.githubRepo.value = this.emailSettings.githubRepo || "";
+        if (this.githubPat) this.githubPat.value = this.emailSettings.githubPat || "";
+
         this.renderRecipients();
         this.updateCloudCronDisplay();
     }
@@ -492,6 +514,93 @@ class AppController {
         const afternoonCron = this.istToUtcCron(aH, aM, aA);
 
         this.cloudCronDisplay.textContent = `  schedule:\n    - cron: '${morningCron}'  # Morning: ${mH}:${mM} ${mA} IST\n    - cron: '${afternoonCron}'  # Afternoon: ${aH}:${aM} ${aA} IST`;
+    }
+
+    async syncCloudScheduler() {
+        const repo = this.emailSettings.githubRepo;
+        const pat = this.emailSettings.githubPat;
+        if (!repo || !pat) {
+            console.log("[CLOUD SYNC] GitHub Sync skipped: Repo or PAT not configured.");
+            return;
+        }
+
+        this.addLog("[CLOUD SYNC] Syncing Cloud Scheduler with GitHub repository...");
+        
+        try {
+            const mH = this.emailSendHour.value;
+            const mM = this.emailSendMinute.value;
+            const mA = this.emailSendAmpm.value;
+
+            const aH = this.emailSecondSendHour.value;
+            const aM = this.emailSecondSendMinute.value;
+            const aA = this.emailSecondSendAmpm.value;
+
+            const morningCron = this.istToUtcCron(mH, mM, mA);
+            const afternoonCron = this.istToUtcCron(aH, aM, aA);
+
+            // 1. Fetch current file content & SHA from GitHub API
+            const url = `https://api.github.com/repos/${repo}/contents/.github/workflows/daily_alert.yml`;
+            const getResponse = await fetch(url, {
+                headers: {
+                    "Authorization": `Bearer ${pat}`,
+                    "Accept": "application/vnd.github.v3+json"
+                }
+            });
+
+            if (!getResponse.ok) {
+                throw new Error(`Failed to fetch daily_alert.yml. Status: ${getResponse.status}`);
+            }
+
+            const fileData = await getResponse.json();
+            const fileSha = fileData.sha;
+            
+            // Decode base64 content
+            // Fix encoding issue by using decodeURIComponent and escape
+            const currentContent = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
+
+            // 2. Modify cron lines in currentContent
+            let lines = currentContent.split('\n');
+            let cronIndices = [];
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('- cron:')) {
+                    cronIndices.push(i);
+                }
+            }
+
+            if (cronIndices.length >= 2) {
+                // Replace cron lines with new times
+                lines[cronIndices[0]] = `    - cron: '${morningCron}'    # ${mH}:${mM} ${mA} IST (Morning Alert Time)`;
+                lines[cronIndices[1]] = `    - cron: '${afternoonCron}'    # ${aH}:${aM} ${aA} IST (Afternoon Alert Time)`;
+            } else {
+                throw new Error("Unable to locate cron schedule lines in daily_alert.yml on GitHub.");
+            }
+
+            const updatedContent = lines.join('\n');
+
+            // 3. Push updated file content back to GitHub
+            const putResponse = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `Bearer ${pat}`,
+                    "Accept": "application/vnd.github.v3+json",
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    message: `Auto-sync Cloud Scheduler: Morning ${mH}:${mM} ${mA}, Afternoon ${aH}:${aM} ${aA} IST`,
+                    content: btoa(unescape(encodeURIComponent(updatedContent))),
+                    sha: fileSha
+                })
+            });
+
+            if (!putResponse.ok) {
+                throw new Error(`Failed to commit daily_alert.yml to GitHub. Status: ${putResponse.status}`);
+            }
+
+            this.addLog("[CLOUD SYNC SUCCESS] Cloud Scheduler updated on GitHub successfully!");
+        } catch (error) {
+            console.error(error);
+            this.addLog(`[CLOUD SYNC ERROR] ${error.message}`);
+        }
     }
 
     updateGatewayUI() {
