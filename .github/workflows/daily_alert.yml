@@ -3,7 +3,7 @@ name: Automated Daily Stock Signal Alerts
 on:
   schedule:
     # All key market scan slots enabled automatically (Mon-Fri)
-    - cron: '15 9 * * 1-5'    # 02:45 PM IST (Morning Alert Time)
+    - cron: '15 10 * * 1-5'    # 03:45 PM IST (Morning Alert Time)
     - cron: '30 9 * * 1-5'    # 03:00 PM IST (Afternoon Alert Time)
     - cron: '50 8 * * 1-5'   # 02:20 PM IST (Market Close Scan)
 
