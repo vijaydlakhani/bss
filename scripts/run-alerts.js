@@ -235,7 +235,9 @@ async function sendEmailAlerts(signals, recipientEmail) {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Accept': 'application/json, text/html',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://vijaydlakhani.github.io/bss/',
+                'Origin': 'https://vijaydlakhani.github.io'
             },
             body: params.toString()
         });
